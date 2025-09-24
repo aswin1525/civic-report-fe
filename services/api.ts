@@ -1,186 +1,310 @@
-import { DUMMY_ISSUES, DUMMY_USERS, DUMMY_AADHAAR_DB } from '../constants';
-import { Issue, IssueStatus, User } from '../types';
+import { Issue, User, UserType } from '../types';
 
-let issues: Issue[] = [...DUMMY_ISSUES];
-let users: User[] = [...DUMMY_USERS];
+// --- Supabase Client Initialization ---
+// The global 'supabase' object is loaded from the CDN script in index.html.
+//
+// VERY IMPORTANT: Replace these placeholder values with your actual Supabase project URL and Anon Key.
+// You can find these in your Supabase project settings under "API".
+const SUPABASE_URL = 'https://zfylpxmbewjnjvfepyby.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpmeWxweG1iZXdqbmp2ZmVweWJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2ODYzNzgsImV4cCI6MjA3NDI2MjM3OH0.xDgXijdI2nhlfc8qo2Ubx0r-6D0VaMyf5SFEzF1MLKQ';
 
-const simulateDelay = <T,>(data: T, delay = 500): Promise<T> => 
-    new Promise(resolve => setTimeout(() => resolve(data), delay));
+let supabase: any; // Use 'any' to accommodate the Supabase client type or null
+
+// FIX: Removed the check for placeholder credentials. Since the credentials
+// are provided, the check was causing a TypeScript error because the constant
+// values could never match the placeholder strings.
+if (!(window as any).supabase) {
+    console.error('Supabase client library not found. Ensure the CDN script in index.html is loaded.');
+    supabase = null;
+} else {
+    // @ts-ignore
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+}
+
 
 // --- Auth ---
 
-// Endpoint: GET /api/auth/check-username?username={username}
-// Method: GET
-// Response: { unique: boolean }
-export const checkUsername = (username: string): Promise<{ unique: boolean }> => 
-    simulateDelay({ unique: !users.some(u => u.username === username) });
-
-// Endpoint: GET /api/auth/check-email?email={email}
-// Method: GET
-// Response: { unique: boolean }
-export const checkEmail = (email: string): Promise<{ unique: boolean }> => 
-    simulateDelay({ unique: !users.some(u => u.email === email) });
-
-// Endpoint: POST /api/auth/register
-// Method: POST
-// Body: Omit<User, 'id' | 'verified' | 'joinedDate' | 'bio'>
-// Response: User
-export const registerUser = (userData: Omit<User, 'id' | 'verified'>): Promise<User> => {
-    const newUser: User = {
-        ...userData,
-        id: `u${users.length + 1}`,
-        verified: false,
-        joinedDate: new Date().toISOString(),
-    };
-    users.push(newUser);
-    return simulateDelay(newUser);
-};
-
-// Endpoint: POST /api/auth/verify-otp
-// Method: POST
-// Body: { otp: string, type: 'email' | 'mobile', userId: string }
-// Response: { success: boolean }
-export const verifyOtp = (otp: string, type: 'email' | 'mobile'): Promise<{ success: boolean }> => {
-    // A real implementation would use the userId from the request body to match the OTP
-    const correctOtp = type === 'email' ? '123456' : '999999';
-    return simulateDelay({ success: otp === correctOtp });
-};
-
-// Endpoint: POST /api/auth/verify-aadhaar
-// Method: POST
-// Body: { aadhaar: string, userId: string }
-// Response: { success: boolean }
-export const verifyAadhaar = (aadhaar: string): Promise<{ success: boolean }> => {
-    // A real implementation would use the userId from the request body
-    return simulateDelay({ success: DUMMY_AADHAAR_DB.has(aadhaar) });
-};
-
-// Endpoint: POST /api/auth/finalize-verification
-// Method: POST
-// Body: { userId: string }
-// Response: User | null
-export const finalizeVerification = (userId: string): Promise<User | null> => {
-    const userIndex = users.findIndex(u => u.id === userId);
-    if (userIndex > -1) {
-        users[userIndex].verified = true;
-        return simulateDelay(users[userIndex]);
+export const onAuthStateChange = (callback: (user: User | null) => void) => {
+    if (!supabase) {
+        // If Supabase is not configured, the user is always logged out.
+        callback(null);
+        return { unsubscribe: () => {} }; // Return a mock subscription
     }
-    return simulateDelay(null);
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+        try {
+            if (event === 'SIGNED_IN' && session?.user) {
+                const profile = await getUserById(session.user.id);
+                callback(profile);
+            } else if (event === 'SIGNED_OUT') {
+                callback(null);
+            }
+        } catch (error) {
+            console.error('Error handling auth state change:', error);
+            callback(null);
+        }
+    });
+    return subscription;
 };
 
-// Endpoint: POST /api/auth/login
-// Method: POST
-// Body: { email: string, password: string }
-// Response: User | null
-export const login = (email: string, password?: string): Promise<User | null> => {
-    // Mock login ignores password, but it's part of the real API contract.
-    // A real implementation would validate the password.
-    const user = users.find(u => u.email === email && u.verified);
-    return simulateDelay(user || null);
+export const getCurrentUser = async (): Promise<User | null> => {
+    if (!supabase) return null;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+        return getUserById(session.user.id);
+    }
+    return null;
+};
+
+// Fix: Added 'email' to RegisterData type, as it's passed from the form for authentication.
+type RegisterData = Omit<User, 'id' | 'created_at'> & {password: string};
+export const registerUser = async (userData: RegisterData) => {
+    if (!supabase) throw new Error('Supabase is not configured. Cannot register user.');
+    const { email, password, ...profileData } = userData;
+    
+    // We pass profile data and email in options.data for the trigger to use if it exists.
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+            data: {
+                ...profileData,
+                email, // Pass email here as well for the trigger
+                avatar_url: `https://i.pravatar.cc/150?u=${profileData.username}`,
+            }
+        }
+    });
+
+    if (authError) throw authError;
+    if (!authData.user) throw new Error("Registration succeeded but no user was returned.");
+
+    // After sign-up, we explicitly upsert the profile.
+    // This makes the app resilient. If the `handle_new_user` trigger in the DB
+    // is missing or outdated, this will create/update the profile correctly.
+    const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+            id: authData.user.id,
+            email, // Explicitly save the email in the profiles table
+            ...profileData,
+            avatar_url: `https://i.pravatar.cc/150?u=${profileData.username}`,
+        });
+    
+    if (profileError) {
+        // This is a critical error. It could mean a RLS policy is wrong or a column is missing.
+        console.error("Critical: Profile upsert failed after user creation:", profileError);
+        // If profile creation fails, the entire registration should fail.
+        // A more advanced implementation might try to delete the auth user here to clean up.
+        throw profileError;
+    }
+
+    return authData;
+};
+
+export const login = async (username: string, password?: string) => {
+    if (!supabase) throw new Error('Supabase is not configured. Cannot login.');
+    if (!password) throw new Error("Password is required for login.");
+
+    // 1. Find the user's email from their username in the public profiles table.
+    // Use `ilike` for a case-insensitive search on the username.
+    const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('email')
+        .ilike('username', username)
+        .single();
+
+    // If profile is not found, OR if the found profile is missing an email, fail.
+    // This handles cases where old user accounts might exist without an email.
+    if (profileError || !profile || !profile.email) {
+        console.error("Login failed: Could not find a profile with a valid email for the given username.", { username, profileError });
+        throw new Error('Invalid username or password.');
+    }
+
+    // 2. Use the retrieved email to sign in with Supabase Auth.
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: profile.email,
+        password,
+    });
+
+    if (authError) throw authError;
+    return getUserById(data.user.id);
+};
+
+export const logout = async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
 };
 
 // --- Issues ---
 
-// Endpoint: GET /api/issues
-// Method: GET
-// Query Params: authorId?: string, managedBy?: string
-// Response: Issue[]
-export const getIssues = (): Promise<Issue[]> => {
-    // This mock returns all issues. The backend should filter based on query params.
-    return simulateDelay([...issues].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+export const ISSUES_PER_PAGE = 10;
+
+export const getIssues = async (page = 0): Promise<Issue[]> => {
+    if (!supabase) return [];
+    const from = page * ISSUES_PER_PAGE;
+    const to = from + ISSUES_PER_PAGE - 1;
+
+    const { data, error } = await supabase
+        .from('issues')
+        .select(`
+            *,
+            profiles (
+                id, username, avatar_url, type
+            )
+        `)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+        
+    if (error) throw error;
+    return data;
 };
 
-// Endpoint: GET /api/issues/{id}
-// Method: GET
-// Response: Issue | null
-export const getIssueById = (id: string): Promise<Issue | null> => {
-    const issue = issues.find(i => i.id === id);
-    return simulateDelay(issue || null);
-};
+export const getIssueById = async (id: string): Promise<Issue | null> => {
+    if (!supabase) return null;
+    const { data, error } = await supabase
+        .from('issues')
+        .select(`
+            *,
+            profiles (*),
+            issue_updates (*)
+        `)
+        .eq('id', id)
+        .order('timestamp', { foreignTable: 'issue_updates', ascending: false })
+        .single();
 
-// Endpoint: POST /api/issues
-// Method: POST
-// Body: FormData (multipart/form-data) with issue fields and an image file.
-// Fields: title, description, tags (comma-separated string), location (JSON string), authorId, authorUsername, authorAvatar, status, image (file)
-// Response: Issue
-export const createIssue = (issueData: Omit<Issue, 'id' | 'createdAt' | 'upvotes' | 'reposts'>): Promise<Issue> => {
-    // A real implementation would handle file upload from FormData and return the stored image URL.
-    const newIssue: Issue = {
-        ...issueData,
-        id: `i${issues.length + 1}`,
-        createdAt: new Date().toISOString(),
-        upvotes: 0,
-        reposts: 0,
-    };
-    issues.unshift(newIssue);
-    return simulateDelay(newIssue);
-};
-
-// Endpoint: PATCH /api/issues/{id}/status
-// Method: PATCH
-// Body: { status: IssueStatus, updateText: string, authorityId: string }
-// Response: Issue | null
-export const updateIssueStatus = (id: string, status: Issue['status'], updateText: string, authorityId: string): Promise<Issue | null> => {
-    const issueIndex = issues.findIndex(i => i.id === id);
-    if (issueIndex > -1) {
-        issues[issueIndex].status = status;
-        const newUpdate = { updatedBy: authorityId, timestamp: new Date().toISOString(), updateText };
-        issues[issueIndex].updates = [...(issues[issueIndex].updates || []), newUpdate];
-        return simulateDelay(issues[issueIndex]);
+    if (error) throw error;
+    // Supabase returns issue_updates as 'updates' in the type, adjust if needed
+    if (data && data.issue_updates) {
+        data.updates = data.issue_updates;
+        delete data.issue_updates;
     }
-    return simulateDelay(null);
+    return data;
 };
 
-// Endpoint: POST /api/issues/{id}/upvote
-// Method: POST
-// Response: { upvotes: number } | null
-export const upvoteIssue = (id: string): Promise<{ upvotes: number } | null> => {
-    // A real implementation would use an auth token to prevent multiple upvotes from the same user.
-    const issueIndex = issues.findIndex(i => i.id === id);
-    if (issueIndex > -1) {
-        issues[issueIndex].upvotes += 1;
-        return simulateDelay({ upvotes: issues[issueIndex].upvotes });
+type CreateIssueData = Omit<Issue, 'id' | 'created_at' | 'upvotes' | 'reposts' | 'image_url'> & { image: File };
+export const createIssue = async (issueData: CreateIssueData) => {
+    if (!supabase) throw new Error('Supabase is not configured.');
+    const { image, ...issueDetails } = issueData;
+
+    // 1. Upload image to storage
+    const fileName = `${Date.now()}_${image.name}`;
+    const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('issue-images')
+        .upload(fileName, image);
+
+    if (uploadError) throw uploadError;
+
+    // 2. Get public URL of the uploaded image
+    const { data: { publicUrl } } = supabase.storage
+        .from('issue-images')
+        .getPublicUrl(fileName);
+
+    // 3. Create the issue in the database
+    const { error: insertError } = await supabase
+        .from('issues')
+        .insert({
+            ...issueDetails,
+            image_url: publicUrl,
+        });
+
+    if (insertError) throw insertError;
+};
+
+export const getIssuesByAuthor = async (authorId: string): Promise<Issue[]> => {
+    if (!supabase) return [];
+    const { data, error } = await supabase
+        .from('issues')
+        .select(`*, profiles (*)`)
+        .eq('author_id', authorId)
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data;
+};
+
+// This function needs a DB view or RPC to be efficient, but for now, it's a client-side filter
+export const getIssuesByAuthority = async (authorityId: string): Promise<Issue[]> => {
+    if (!supabase) return [];
+    // A proper implementation would use an RPC function to find issues in an authority's jurisdiction.
+    // As a placeholder, we fetch all issues they've updated.
+    const { data: updates, error: updateError } = await supabase
+      .from('issue_updates')
+      .select('issue_id')
+      .eq('updated_by', authorityId)
+
+    if (updateError) throw updateError
+    
+    const issueIds = [...new Set(updates.map(u => u.issue_id))]
+
+    const { data, error } = await supabase
+        .from('issues')
+        .select(`*, profiles (*)`)
+        .in('id', issueIds)
+        .order('created_at', { ascending: false });
+    if (error) throw error
+    return data
+};
+
+export const updateIssueStatus = async (issueId: string, status: string, updateText: string, authorityId: string) => {
+    if (!supabase) throw new Error('Supabase not configured.');
+    // Use an RPC to do this atomically in a real app, but transactions work too.
+    const { error: updateError } = await supabase
+        .from('issue_updates')
+        .insert({ issue_id: issueId, update_text: `${status}: ${updateText}`, updated_by: authorityId });
+    if (updateError) throw updateError;
+
+    const { error: issueError } = await supabase
+        .from('issues')
+        .update({ status })
+        .eq('id', issueId);
+    if (issueError) throw issueError;
+};
+
+export const upvoteIssue = async (issueId: string) => {
+    if (!supabase) return;
+    await supabase.rpc('increment_upvotes', { issue_id_in: issueId });
+};
+
+export const repostIssue = async (issueId: string) => {
+    if (!supabase) return;
+    await supabase.rpc('increment_reposts', { issue_id_in: issueId });
+};
+
+export const getUserById = async (userId: string): Promise<User | null> => {
+    if (!supabase) return null;
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+    if (error) {
+        console.error("Error fetching user:", error);
+        return null;
     }
-    return simulateDelay(null);
+    return data;
 };
 
-// Endpoint: POST /api/issues/{id}/repost
-// Method: POST
-// Response: { reposts: number } | null
-export const repostIssue = (id: string): Promise<{ reposts: number } | null> => {
-    // A real implementation would use an auth token.
-    const issueIndex = issues.findIndex(i => i.id === id);
-    if (issueIndex > -1) {
-        issues[issueIndex].reposts += 1;
-        return simulateDelay({ reposts: issues[issueIndex].reposts });
-    }
-    return simulateDelay(null);
+// --- Real-time Subscriptions ---
+export const subscribeToIssueUpdates = (
+    issueId: string, 
+    onUpdate: () => void
+): (() => Promise<"ok" | "timed out" | "error">) | null => {
+    if (!supabase) return null;
+
+    const channel = supabase.channel(`issue-${issueId}`);
+
+    channel
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'issues', filter: `id=eq.${issueId}` },
+            onUpdate // Refetch on any change to the issue row itself (e.g., status)
+        )
+        .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'issue_updates', filter: `issue_id=eq.${issueId}` },
+            onUpdate // Refetch when a new update is added
+        )
+        .subscribe();
+
+    // Return the cleanup function
+    return () => channel.unsubscribe();
 };
-
-// --- Profile / Users ---
-
-// Endpoint: GET /api/users/{id}
-// Method: GET
-// Response: User | null
-export const getUserById = (userId: string): Promise<User | null> => {
-    const user = users.find(u => u.id === userId);
-    return simulateDelay(user || null);
-};
-
-// Endpoint: GET /api/issues?authorId={authorId}
-// Method: GET
-// Response: Issue[]
-export const getIssuesByAuthor = (authorId: string): Promise<Issue[]> => {
-    // This is a convenience function that should call GET /api/issues?authorId={authorId}
-    const userIssues = issues.filter(i => i.authorId === authorId);
-    return simulateDelay(userIssues.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-};
-
-// Endpoint: GET /api/issues?managedBy={authorityId}
-// Method: GET
-// Response: Issue[]
-export const getIssuesByAuthority = (authorityId: string): Promise<Issue[]> => {
-    // This is a convenience function that should call GET /api/issues?managedBy={authorityId}
-    const managedIssues = issues.filter(i => i.updates?.some(u => u.updatedBy === authorityId));
-    return simulateDelay(managedIssues.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-}

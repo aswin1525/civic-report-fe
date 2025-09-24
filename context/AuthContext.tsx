@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { User, UserType } from '../types';
 import * as api from '../services/api';
@@ -7,7 +6,7 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   userType: UserType | null;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
 }
@@ -19,29 +18,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+    let authSubscription: { unsubscribe: () => void; } | null = null;
+
+    async function initializeSession() {
+      try {
+        const currentUser = await api.getCurrentUser();
+        setUser(currentUser);
+        
+        // This subscription is now created inside the try/catch block
+        authSubscription = api.onAuthStateChange(setUser);
+      } catch (error) {
+        console.error("Failed to initialize authentication:", error);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
     }
-    setLoading(false);
+
+    initializeSession();
+
+    // Cleanup function will be called on component unmount
+    return () => {
+      authSubscription?.unsubscribe();
+    };
   }, []);
 
-  const login = async (email: string, password: string) => {
-    setLoading(true);
-    const loggedInUser = await api.login(email, password);
-    if (loggedInUser) {
-      setUser(loggedInUser);
-      localStorage.setItem('user', JSON.stringify(loggedInUser));
-      setLoading(false);
-      return true;
+  const login = async (username: string, password: string): Promise<boolean> => {
+    try {
+      const loggedInUser = await api.login(username, password);
+      if (loggedInUser) {
+        setUser(loggedInUser);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Login failed:", error);
+      return false;
     }
-    setLoading(false);
-    return false;
   };
 
   const logout = () => {
+    api.logout();
     setUser(null);
-    localStorage.removeItem('user');
   };
 
   return (

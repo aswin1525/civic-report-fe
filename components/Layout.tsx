@@ -42,7 +42,8 @@ const DesktopSidebar: React.FC = () => {
             </nav>
             <div className="p-4 border-t border-dark-700">
                 <div className="flex items-center mb-4">
-                    <img src={user?.avatarUrl} alt={user?.username} className="w-10 h-10 rounded-full mr-3" />
+                    {/* Fix: Corrected property name from 'avatarUrl' to 'avatar_url' to match the User type definition. */}
+                    <img src={user?.avatar_url} alt={user?.username} className="w-10 h-10 rounded-full mr-3" />
                     <div>
                         <p className="font-semibold text-white">{user?.username}</p>
                         <p className="text-xs text-dark-400 capitalize">{user?.type}</p>

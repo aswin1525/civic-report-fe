@@ -1,3 +1,5 @@
+// Fix: Removed incorrect import of 'IssueUpdate' as it is defined in this file.
+
 export enum UserType {
   Citizen = 'citizen',
   Authority = 'authority',
@@ -10,16 +12,15 @@ export enum IssueStatus {
 }
 
 export interface User {
-  id: string;
+  id: string; // uuid from auth.users
   username: string;
   email: string;
   mobile: string;
   aadhaar: string;
   type: UserType;
-  verified: boolean;
-  avatarUrl?: string;
+  avatar_url?: string;
   bio?: string;
-  joinedDate?: string;
+  created_at?: string;
 }
 
 export interface Issue {
@@ -27,24 +28,25 @@ export interface Issue {
   title: string;
   description: string;
   tags: string[];
-  imageUrl: string;
-  location: {
-    lat: number;
-    lng: number;
-  };
+  image_url: string;
+  lat: number;
+  lng: number;
   status: IssueStatus;
-  authorId: string;
-  authorUsername: string;
-  authorAvatar?: string;
-  createdAt: string;
+  author_id: string;
+  created_at: string;
   upvotes: number;
   reposts: number;
+  resolved_image_url?: string;
+  // Joined data from 'profiles' table, renamed from 'author' for consistency
+  profiles?: User; 
+  // Joined data from 'issue_updates' table
   updates?: IssueUpdate[];
-  resolvedImageUrl?: string;
 }
 
 export interface IssueUpdate {
-  updatedBy: string; // authorityId
+  id: string;
+  issue_id: string;
+  updated_by: string; // authorityId (uuid)
   timestamp: string;
-  updateText: string;
+  update_text: string;
 }

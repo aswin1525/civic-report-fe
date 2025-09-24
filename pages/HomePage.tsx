@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Issue } from '../types';
 import * as api from '../services/api';
 import IssueCard from '../components/IssueCard';
-import { Card } from '../components/ui';
+import { Card, Button } from '../components/ui';
 
 const TrendingTopics: React.FC<{issues: Issue[]}> = ({ issues }) => {
     const trendingTags = useMemo(() => {
@@ -33,20 +33,41 @@ const TrendingTopics: React.FC<{issues: Issue[]}> = ({ issues }) => {
 const HomePage: React.FC = () => {
     const [issues, setIssues] = useState<Issue[]>([]);
     const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const [isFetchingMore, setIsFetchingMore] = useState(false);
 
     useEffect(() => {
-        const fetchIssues = async () => {
+        const fetchInitialIssues = async () => {
             try {
-                const fetchedIssues = await api.getIssues();
+                const fetchedIssues = await api.getIssues(0);
                 setIssues(fetchedIssues);
+                setPage(0);
+                setHasMore(fetchedIssues.length === api.ISSUES_PER_PAGE);
             } catch (error) {
                 console.error("Failed to fetch issues:", error);
             } finally {
                 setLoading(false);
             }
         };
-        fetchIssues();
+        fetchInitialIssues();
     }, []);
+
+    const loadMoreIssues = async () => {
+        if (isFetchingMore || !hasMore) return;
+        setIsFetchingMore(true);
+        const nextPage = page + 1;
+        try {
+            const newIssues = await api.getIssues(nextPage);
+            setIssues(prev => [...prev, ...newIssues]);
+            setPage(nextPage);
+            setHasMore(newIssues.length === api.ISSUES_PER_PAGE);
+        } catch (error) {
+            console.error("Failed to fetch more issues:", error);
+        } finally {
+            setIsFetchingMore(false);
+        }
+    };
 
     if (loading) {
         return <div className="text-center p-8">Loading issues...</div>;
@@ -61,6 +82,13 @@ const HomePage: React.FC = () => {
                     <Card>
                       <p className="text-center text-dark-400 py-8">No issues reported yet. Be the first!</p>
                     </Card>
+                )}
+                {hasMore && (
+                    <div className="flex justify-center mt-4">
+                        <Button onClick={loadMoreIssues} disabled={isFetchingMore} variant="secondary">
+                            {isFetchingMore ? 'Loading...' : 'Load More'}
+                        </Button>
+                    </div>
                 )}
             </div>
             <div className="hidden lg:block lg:col-span-1">

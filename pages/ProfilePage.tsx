@@ -9,11 +9,11 @@ import { Card } from '../components/ui';
 const ProfileHeader: React.FC<{ user: User }> = ({ user }) => (
     <Card className="mb-6">
         <div className="flex flex-col sm:flex-row items-center">
-            <img src={user.avatarUrl} alt={user.username} className="w-24 h-24 rounded-full mr-0 sm:mr-6 mb-4 sm:mb-0 border-4 border-primary" />
+            <img src={user.avatar_url} alt={user.username} className="w-24 h-24 rounded-full mr-0 sm:mr-6 mb-4 sm:mb-0 border-4 border-primary" />
             <div className="text-center sm:text-left">
                 <h2 className="text-2xl font-bold text-white">{user.username}</h2>
-                <p className="text-dark-400">{user.email}</p>
-                <p className="text-sm text-dark-200 mt-2 max-w-lg">{user.bio}</p>
+                <p className="text-dark-400">{user.id}</p> {/* Email is sensitive, might not be on public profile */}
+                <p className="text-sm text-dark-200 mt-2 max-w-lg">{user.bio || 'No bio provided.'}</p>
                  <span className={`mt-2 text-xs font-semibold inline-block py-1 px-3 uppercase rounded-full text-primary-foreground bg-primary/80`}>
                     {user.type}
                 </span>
@@ -59,9 +59,9 @@ const ProfileStats: React.FC<{ user: User, issues: Issue[] }> = ({ user, issues 
                 <span className="text-dark-200 font-medium">Pending</span>
                 <span className="font-bold text-pending text-lg">{stats.pendingCount}</span>
             </div>
-            {user.joinedDate && (
+            {user.created_at && (
                  <div className="pt-2 border-t border-dark-700 text-center">
-                    <span className="text-xs text-dark-400">Joined on {new Date(user.joinedDate).toLocaleDateString()}</span>
+                    <span className="text-xs text-dark-400">Joined on {new Date(user.created_at).toLocaleDateString()}</span>
                 </div>
             )}
         </div>
@@ -78,14 +78,11 @@ const ProfilePage: React.FC = () => {
 
     useEffect(() => {
         const fetchProfileData = async () => {
+            if (!loggedInUser) return;
             try {
                 setLoading(true);
-                let userToFetch = null;
-                if (userId) {
-                    userToFetch = await api.getUserById(userId);
-                } else {
-                    userToFetch = loggedInUser;
-                }
+                const idToFetch = userId || loggedInUser.id;
+                const userToFetch = await api.getUserById(idToFetch);
 
                 if (userToFetch) {
                     setProfileUser(userToFetch);
@@ -94,7 +91,7 @@ const ProfilePage: React.FC = () => {
                         : await api.getIssuesByAuthority(userToFetch.id);
                     setIssues(userIssues);
                 } else {
-                    // Handle user not found case
+                    console.error("User not found");
                 }
             } catch (error) {
                 console.error("Failed to fetch profile data:", error);
