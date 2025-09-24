@@ -1,0 +1,7 @@
+{
+  "name": "Civic Issue Reporting System",
+  "description": "A platform for citizens to report local problems like potholes and broken streetlights, and for authorities to track and resolve them. This PWA fosters community engagement and accountability.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

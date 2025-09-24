@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Civic Issue Reporting System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: {
+                DEFAULT: 'hsl(170, 75%, 40%)',
+                '50': 'hsl(170, 75%, 95%)',
+                '100': 'hsl(170, 75%, 85%)',
+                '200': 'hsl(170, 75%, 75%)',
+                '300': 'hsl(170, 75%, 65%)',
+                '400': 'hsl(170, 75%, 55%)',
+                '500': 'hsl(170, 75%, 45%)',
+                '600': 'hsl(170, 75%, 40%)',
+                '700': 'hsl(170, 75%, 30%)',
+                '800': 'hsl(170, 75%, 20%)',
+                '900': 'hsl(170, 75%, 10%)',
+                foreground: 'hsl(0, 0%, 100%)',
+              },
+              dark: {
+                900: '#111827', // Dark Grey for main background
+                800: '#1F2937', // Dark Grey for cards
+                700: '#374151', // Dark Grey for borders
+                200: '#E5E7EB', // Light Grey for primary text
+                400: '#9CA3AF', // Lighter Grey for secondary text
+              },
+              pending: '#FBBF24', // Amber 400
+              inprogress: '#3B82F6', // Blue 500
+              resolved: '#10B981', // Emerald 500
+            },
+            borderRadius: {
+              lg: `0.75rem`,
+              md: `0.5rem`,
+              sm: `0.375rem`,
+            },
+          },
+        },
+      }
+    </script>
+    <style>
+      /* Hide scrollbar for Chrome, Safari and Opera */
+      ::-webkit-scrollbar {
+        display: none;
+      }
+      /* Hide scrollbar for IE, Edge and Firefox */
+      body {
+        -ms-overflow-style: none;  /* IE and Edge */
+        scrollbar-width: none;  /* Firefox */
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.1"
+  }
+}
+</script>
+</head>
+  <body class="bg-dark-900 text-dark-200">
+    <div id="root"></div>
+  </body>
+</html>
