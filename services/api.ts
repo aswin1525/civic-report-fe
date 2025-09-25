@@ -101,32 +101,40 @@ export const registerUser = async (userData: RegisterData) => {
     return authData;
 };
 
-export const login = async (username: string, password?: string) => {
+export const login = async (usernameOrEmail: string, password?: string) => {
     if (!supabase) throw new Error('Supabase is not configured. Cannot login.');
     if (!password) throw new Error("Password is required for login.");
 
-    // 1. Find the user's email from their username in the public profiles table.
-    // Use `ilike` for a case-insensitive search on the username.
+    const identifier = usernameOrEmail.trim();
+
+    // 1. Find the user's email from their username OR email in the public profiles table.
+    // This flexible query improves the data fetching part of the login process.
     const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('email')
-        .ilike('username', username)
+        .or(`username.ilike.${identifier},email.eq.${identifier}`)
+        .limit(1)
         .single();
 
-    // If profile is not found, OR if the found profile is missing an email, fail.
-    // This handles cases where old user accounts might exist without an email.
+    // If a profile isn't found, throw a generic error. This can happen if the
+    // username/email is wrong or if RLS policies block the query for unauthenticated users.
     if (profileError || !profile || !profile.email) {
-        console.error("Login failed: Could not find a profile with a valid email for the given username.", { username, profileError });
-        throw new Error('Invalid username or password.');
+        console.error("Login failed: Could not find a profile for the given username or email.", { identifier, profileError });
+        throw new Error('Invalid credentials. Please try again.');
     }
 
-    // 2. Use the retrieved email to sign in with Supabase Auth.
+    // 2. With the correct email retrieved, attempt to sign in via Supabase Auth.
     const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: profile.email,
         password,
     });
 
-    if (authError) throw authError;
+    if (authError) {
+        // Supabase auth will throw an error for incorrect passwords. We re-throw it, and the
+        // UI layer will catch it and display a generic "Invalid credentials" message.
+        throw authError;
+    }
+    
     return getUserById(data.user.id);
 };
 

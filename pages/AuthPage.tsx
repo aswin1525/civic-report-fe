@@ -36,7 +36,7 @@ const AuthPage: React.FC = () => {
 };
 
 const LoginForm: React.FC = () => {
-    const [username, setUsername] = useState('');
+    const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const { login } = useAuth();
@@ -47,7 +47,7 @@ const LoginForm: React.FC = () => {
         e.preventDefault();
         setError('');
         setLoading(true);
-        const success = await login(username, password);
+        const success = await login(identifier, password);
         if (success) {
             navigate('/');
         } else {
@@ -59,8 +59,8 @@ const LoginForm: React.FC = () => {
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1">
-                <Label htmlFor="username">Username</Label>
-                <Input id="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)} required autoComplete="username" />
+                <Label htmlFor="login-identifier">Username or Email</Label>
+                <Input id="login-identifier" type="text" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required autoComplete="username" />
             </div>
             <div className="space-y-1">
                 <Label htmlFor="password">Password</Label>
