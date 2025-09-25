@@ -136,7 +136,7 @@ const CreateIssuePage: React.FC = () => {
             await api.createIssue({
                 title,
                 description,
-                tags: tags.split(',').map(t => `#${t.trim()}`).filter(t => t !== '#'),
+                tags: tags.split(',').map(t => t.trim()).filter(Boolean),
                 image,
                 lat: location.lat,
                 lng: location.lng,

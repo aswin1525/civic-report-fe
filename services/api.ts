@@ -213,6 +213,8 @@ export const createIssue = async (issueData: CreateIssueData) => {
         .insert({
             ...issueDetails,
             image_url: publicUrl,
+            upvotes: 0,
+            reposts: 0,
         });
 
     if (insertError) throw insertError;
